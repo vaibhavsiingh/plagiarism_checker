@@ -34,7 +34,7 @@ std::array<int, 5> match_submissions(std::vector<int> &arr1, std::vector<int> &a
             }
             
             // Check if mismatch ratio is above 20%
-            if (dp[i][j].second > 0.2 * dp[i][j].first) {
+            if (dp[i][j].second > 0.1 * dp[i][j].first) {
                 // Reset if too many mismatches
                 dp[i][j] = {0, 0};
             } else if (dp[i][j].first > maxLength) {
@@ -50,10 +50,18 @@ std::array<int, 5> match_submissions(std::vector<int> &arr1, std::vector<int> &a
     result[3] = endPos - maxLength + 1; // Start index in arr1
 
     // Display the result for verification
-    for (int i = 0; i < 5; i++) {
-        std::cout << result[i] << ' ';
-    }
-    std::cout << "\n";
+    // for (int i = 0; i < 5; i++) {
+    //     std::cout << result[i] << ' ';
+    // }
+    // std::cout << "\n";
+
+    // for(int i=0; i<m; i++){
+    //     std::cout << arr1[i] << " ";
+    // }
+    // std::cout << "\n\n\n\n";
+    // for(int i=0; i<n; i++){
+    //     std::cout << arr2[i] << " ";
+    // }
     
     return result;
 }
