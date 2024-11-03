@@ -49,19 +49,6 @@ std::array<int, 5> match_submissions(std::vector<int> &arr1, std::vector<int> &a
     result[2] = maxLength;  // Length of the longest fuzzy matching subsequence
     result[3] = endPos - maxLength + 1; // Start index in arr1
 
-    // Display the result for verification
-    // for (int i = 0; i < 5; i++) {
-    //     std::cout << result[i] << ' ';
-    // }
-    // std::cout << "\n";
-
-    // for(int i=0; i<m; i++){
-    //     std::cout << arr1[i] << " ";
-    // }
-    // std::cout << "\n\n\n\n";
-    // for(int i=0; i<n; i++){
-    //     std::cout << arr2[i] << " ";
-    // }
     
     return result;
 }

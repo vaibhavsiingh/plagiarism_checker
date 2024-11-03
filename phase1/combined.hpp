@@ -111,14 +111,14 @@ constexpr double APPROX_MATCH_THRESHOLD = 0.8;
             // Check if mismatch ratio is above 20%
             if (dp[i][j].second > 0.1 * dp[i][j].first) {
                 // Reset if too many mismatches
-                dp[i][j] = {0, 0};
+                dp[i][j] = {1, (tokens1[i - 1] != tokens2[j - 1]) ? 1 : 0};
             } else if (dp[i][j].first > maxLength) {
                 // Update the maximum length and position if current is the longest valid subsequence
                 maxLength = dp[i][j].first;
                 endPos = i - 1;
                 endPos2 = j - 1;
             }
-        }
+        }   
     }
     
     // Calculate start position of the longest subsequence
