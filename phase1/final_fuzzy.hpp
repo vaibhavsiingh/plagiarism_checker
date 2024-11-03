@@ -9,16 +9,16 @@ const double MAX_MISMATCH_RATIO = 0.2; // 20% mismatch tolerance
 const int MIN_LENGTH = 30;  // Minimum length requirement
 
 // Function to find the longest common subsequence with a maximum mismatch ratio
-// arr1: First array
-// arr2: Second array
+// tokens1: First array
+// tokens2: Second array
 // flag: 1 for forward, 2 for reverse
-// Returns an array of 3 integers: {length, start position in arr1, start position in arr2}
+// Returns an array of 3 integers: {length, start position in tokens1, start position in tokens2}
 
-std::array<int,3> approximate_searching(std::vector<int> &arr1, std::vector<int> &arr2, int flag){
+std::array<int,3> approximate_searching(std::vector<int> &tokens1, std::vector<int> &tokens2, int flag){
     const int MIN_LENGTH = 30;  
     
-    int m = arr1.size();
-    int n = arr2.size();
+    int m = tokens1.size();
+    int n = tokens2.size();
     
     // lcs_table table to store pairs of (length, mismatches)
     std::vector<std::vector<std::pair<int, int>>> lcs_table(m + 1, std::vector<std::pair<int, int>>(n + 1, {0, 0}));
@@ -29,7 +29,7 @@ std::array<int,3> approximate_searching(std::vector<int> &arr1, std::vector<int>
 
     for (int i = 1; i <= m; i++) {
         for (int j = 1; j <= n; j++) {
-            if (arr1[i - 1] == arr2[j - 1]) {
+            if (tokens1[i - 1] == tokens2[j - 1]) {
                 // Match found
                 lcs_table[i][j].first = lcs_table[i - 1][j - 1].first + 1;
                 lcs_table[i][j].second = lcs_table[i - 1][j - 1].second;
@@ -41,7 +41,7 @@ std::array<int,3> approximate_searching(std::vector<int> &arr1, std::vector<int>
             // Check if mismatch ratio is within range
             if (lcs_table[i][j].second > MAX_MISMATCH_RATIO * lcs_table[i][j].first) {
                 // Too many mismatches, reset sequence
-                lcs_table[i][j] = {1, (arr1[i - 1] != arr2[j - 1]) ? 1 : 0};
+                lcs_table[i][j] = {1, (tokens1[i - 1] != tokens2[j - 1]) ? 1 : 0};
             } else if (lcs_table[i][j].first >= MIN_LENGTH && lcs_table[i][j].first > maxLength) {
                 // Updte maximum length and positions if sequence is long enough
                 maxLength = lcs_table[i][j].first;
@@ -66,24 +66,24 @@ std::array<int,3> approximate_searching(std::vector<int> &arr1, std::vector<int>
 }
 
 // Function to find the longest common subsequence with a maximum mismatch ratio
-std::array<int, 3> approximate_match(std::vector<int> &arr1, std::vector<int> &arr2) {
-    if (arr1.empty() || arr2.empty()) {
+std::array<int, 3> approximate_match(std::vector<int> &tokens1, std::vector<int> &tokens2) {
+    if (tokens1.empty() || tokens2.empty()) {
         return {0, 0, 0};
     }
 
     // Find the longest common subsequence in both directions    
-    std::array<int, 3> x = approximate_searching(arr1, arr2,1);
+    std::array<int, 3> x = approximate_searching(tokens1, tokens2,1);
 
-    std::reverse(arr1.begin(), arr1.end());
-    std::reverse(arr2.begin(), arr2.end());
+    std::reverse(tokens1.begin(), tokens1.end());
+    std::reverse(tokens2.begin(), tokens2.end());
 
-    std::array<int, 3> y = approximate_searching(arr1, arr2,2);
+    std::array<int, 3> y = approximate_searching(tokens1, tokens2,2);
 
-    std::reverse(arr1.begin(), arr1.end());
-    std::reverse(arr2.begin(), arr2.end());
+    std::reverse(tokens1.begin(), tokens1.end());
+    std::reverse(tokens2.begin(), tokens2.end());
 
-    int m = arr1.size();
-    int n = arr2.size();
+    int m = tokens1.size();
+    int n = tokens2.size();
 
     // Combine the results
     int extreme_left1 = m-y[1]-1;
@@ -112,7 +112,7 @@ std::array<int, 3> approximate_match(std::vector<int> &arr1, std::vector<int> &a
     int ptr1 = left1, ptr2 = left2;
     int count_misses = 0;
     while(ptr1 <= right1 && ptr2 <= right2){
-        if(arr1[ptr1] != arr2[ptr2]){
+        if(tokens1[ptr1] != tokens2[ptr2]){
             count_misses++;
         }
         ptr1++;
@@ -125,17 +125,17 @@ std::array<int, 3> approximate_match(std::vector<int> &arr1, std::vector<int> &a
     int ptr_left1 = left1, ptr_right1 = right1, ptr_left2 = left2, ptr_right2 = right2;
     float curr_ratio = (float)count_misses/(right1-left1+1);
     while(ptr_left1 >= extreme_left1 && ptr_right1 <= extreme_right1){
-        if(arr1[ptr_left1] != arr2[ptr_left2]){
+        if(tokens1[ptr_left1] != tokens2[ptr_left2]){
             count_misses++;
             ptr_right2++;
             ptr_right1++;
         }
-        if(arr1[ptr_right1] != arr2[ptr_right2]){
+        if(tokens1[ptr_right1] != tokens2[ptr_right2]){
             count_misses++;
             ptr_left1--;      
             ptr_left2--;
         }
-        if(arr1[ptr_left1] == arr2[ptr_left2] && arr1[ptr_right1] == arr2[ptr_right2]){
+        if(tokens1[ptr_left1] == tokens2[ptr_left2] && tokens1[ptr_right1] == tokens2[ptr_right2]){
             ptr_right2++;
             ptr_right1++;
             ptr_left1--;       
