@@ -77,7 +77,7 @@ std::array<int, 5> match_submissions(std::vector<int> &arr1, std::vector<int> &a
     if (y[0] >= MIN_LENGTH) {
         int n = arr1.size(), m = arr2.size();
         std::cout << "n: " << n << " m: " << m << std::endl;
-        return {0, 0, y[0], n-y[1], m-y[2]};
+        return {0, 0, y[0], y[1]+y[0], y[2]+y[0]};
     }
 
 
