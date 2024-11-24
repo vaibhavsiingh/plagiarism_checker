@@ -32,7 +32,7 @@ protected:
     std::unordered_map<std::shared_ptr<submission_t>, std::chrono::time_point<std::chrono::steady_clock>> submission_timestamps;
 
     std::unordered_set<std::shared_ptr<student_t>> flagged_students;
-    std::unordered_set<std::shared_ptr<professor_t>> flagged_professors;
+    std::unordered_set<std::shared_ptr<submission_t>> flagged_sub;
 
     // Queue to hold new submissions to be processed
     std::queue<std::shared_ptr<submission_t>> processing_queue;
