@@ -1,6 +1,10 @@
-#include <unordered_map>
-#include <chrono>
 #include "./plagiarism_checker.hpp"
+
+const int MOD = 1e9 + 7; // Large prime for hash modulus
+const int BASE = 31;     // Base for rolling hash
+const int MIN_LENGTH = 15;
+const int EXACT_LENGTH = 75;
+
 
 // Helper to get the current timestamp
 static std::chrono::time_point<std::chrono::steady_clock> get_current_time() {
@@ -72,13 +76,31 @@ void plagiarism_checker_t::plagiarism_check() {
                     auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(
                         curr_submission_time - old_submission_time).count();
                     if (time_diff > 1) {
-                        if (submission->student) submission->student->flag_student(submission);
-                        if (submission->professor) submission->professor->flag_professor(submission);
+                        if (submission->student && !flagged_students.count(submission->student)) {
+                            submission->student->flag_student(submission);
+                            flagged_students.insert(submission->student);
+                        }
+                        if (submission->professor && !flagged_professors.count(submission->professor)) {
+                            submission->professor->flag_professor(submission);
+                            flagged_professors.insert(submission->professor);
+                        }
                     } else {
-                        if (submission->professor) submission->professor->flag_professor(submission);
-                        if (submission->student) submission->student->flag_student(submission);
-                        if (old_submission->student) old_submission->student->flag_student(old_submission);
-                        if (old_submission->professor) old_submission->professor->flag_professor(old_submission);
+                        if (submission->student && !flagged_students.count(submission->student)) {
+                            submission->student->flag_student(submission);
+                            flagged_students.insert(submission->student);
+                        }
+                        if (submission->professor && !flagged_professors.count(submission->professor)) {
+                            submission->professor->flag_professor(submission);
+                            flagged_professors.insert(submission->professor);
+                        }
+                        if (old_submission->student && !flagged_students.count(old_submission->student)) {
+                            old_submission->student->flag_student(old_submission);
+                            flagged_students.insert(old_submission->student);
+                        }
+                        if (old_submission->professor && !flagged_professors.count(old_submission->professor)) {
+                            old_submission->professor->flag_professor(old_submission);
+                            flagged_professors.insert(old_submission->professor);
+                        }
                     }
                 }
             }
@@ -95,41 +117,68 @@ std::vector<int> plagiarism_checker_t::tokenize_code(const std::string& codefile
     return tokenizer.get_tokens();
 }
 
-bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens,
-                                          const std::vector<int>& old_tokens) {
-    int new_size = new_tokens.size();
-    int old_size = old_tokens.size();
 
-    int pattern_match_count = 0;
 
-    for (int i = 0; i <= new_size - 15; ++i) {
-        for (int j = 0; j <= old_size - 15; ++j) {
-            int match_length = 0;
+std::unordered_set<int> compute_hashes(const std::vector<int>& tokens, int length, const std::vector<int>& power) {
+    std::unordered_set<int> hashes;
+    if (tokens.size() < length) return hashes;
 
-            while (i + match_length < new_size && j + match_length < old_size &&
-                   new_tokens[i + match_length] == old_tokens[j + match_length]) {
-                match_length++;
-                if (match_length >= 75) {
-                    return true; // Exact match found
-                }
-            }
-
-            if (match_length >= 15) {
-                pattern_match_count++;
-                if (pattern_match_count >= 10) {
-                    return true; // Enough small pattern matches found
-                }
-            }
-        }
+    int hash = 0;
+    for (int i = 0; i < length; ++i) {
+        hash = (1LL * hash * BASE + tokens[i]) % MOD;
     }
+    hashes.insert(hash);
 
-    return false; // No plagiarism detected
+    for (size_t i = length; i < tokens.size(); ++i) {
+        hash = (1LL * hash * BASE - 1LL * tokens[i - length] * power[length] % MOD + MOD) % MOD;
+        hash = (hash + tokens[i]) % MOD;
+        hashes.insert(hash);
+    }
+    return hashes;
 }
 
+bool check_plagiarism(const std::vector<int>& tokens, int length, const std::unordered_set<int>& old_hashes, int threshold, const std::vector<int>& power) {
+    if (tokens.size() < length) return false;
+
+    int hash = 0, match_count = 0;
+    for (int i = 0; i < length; ++i) {
+        hash = (1LL * hash * BASE + tokens[i]) % MOD;
+    }
+    if (old_hashes.count(hash)) {
+        match_count++;
+        if (length == EXACT_LENGTH || match_count >= threshold) return true;
+    }
+
+    for (size_t i = length; i < tokens.size(); ++i) {
+        hash = (1LL * hash * BASE - 1LL * tokens[i - length] * power[length] % MOD + MOD) % MOD;
+        hash = (hash + tokens[i]) % MOD;
+        if (old_hashes.count(hash)) {
+            match_count++;
+            if (length == EXACT_LENGTH || match_count >= threshold) return true;
+        }
+    }
+    return false;
+}
+
+bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens, const std::vector<int>& old_tokens) {
+    int new_size = new_tokens.size(), old_size = old_tokens.size();
+    std::vector<int> power(std::max({new_size, old_size, EXACT_LENGTH + 1}), 1);
+    for (int i = 1; i < power.size(); i++) {
+        power[i] = (1LL * power[i - 1] * BASE) % MOD;
+    }
+
+    auto old_hashes_15 = compute_hashes(old_tokens, MIN_LENGTH, power);
+    auto old_hashes_75 = compute_hashes(old_tokens, EXACT_LENGTH, power);
+
+    if (check_plagiarism(new_tokens, EXACT_LENGTH, old_hashes_75, 0, power)) return true;
+    return check_plagiarism(new_tokens, MIN_LENGTH, old_hashes_15, 20, power);
+}
+
+
 // Add submission to database with tokenization and timestamp
-void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submission,
-                                           const std::vector<int>& tokens) {
-                                            auto timestamp = get_current_time();
+void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submission, const std::vector<int>& tokens) {
+    
+    auto timestamp = get_current_time();
     submission_timestamps[submission] = timestamp; // Record the timestamp
     tokenized_database[submission] = tokens;
 }

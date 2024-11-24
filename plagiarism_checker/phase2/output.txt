@@ -1,24 +1,9 @@
 I was flagged in polymorph.cpp and must defend myself in front of Prof. SeverusSnape.
 Student DracoMalfoy has plagiarized in polymorph.cpp and will be receiving an FR grade.
 
+I was flagged in brooms.cpp and must defend myself in front of Prof. MinervaMcgonagall.
 Student NevilleLongbottom has plagiarized in brooms.cpp and will be receiving an FR grade.
 
-I was flagged in brooms.cpp and must defend myself in front of Prof. MinervaMcgonagall.
-I was flagged in polymorph.cpp and must defend myself in front of Prof. SeverusSnape.
-Student DracoMalfoy has plagiarized in polymorph.cpp and will be receiving an FR grade.
-
-Student NevilleLongbottom has plagiarized in brooms.cpp and will be receiving an FR grade.
-
-I was flagged in brooms.cpp and must defend myself in front of Prof. MinervaMcgonagall.
 I was flagged in apparation.cpp and must defend myself in front of Prof. AlbusDumbledore.
 Student HermioneGranger has plagiarized in apparation.cpp and will be receiving an FR grade.
-
-I was flagged in brooms.cpp and must defend myself in front of Prof. MinervaMcgonagall.
-Student NevilleLongbottom has plagiarized in brooms.cpp and will be receiving an FR grade.
-
-I was flagged in brooms.cpp and must defend myself in front of Prof. MinervaMcgonagall.
-Student NevilleLongbottom has plagiarized in brooms.cpp and will be receiving an FR grade.
-
-I was flagged in brooms.cpp and must defend myself in front of Prof. MinervaMcgonagall.
-Student NevilleLongbottom has plagiarized in brooms.cpp and will be receiving an FR grade.
 
