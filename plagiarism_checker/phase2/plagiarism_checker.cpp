@@ -1,6 +1,6 @@
 #include "plagiarism_checker.hpp"
 
-
+// Constant Global variables used
 const int MOD = 1e9 + 7;
 const int BASE = 31;
 const int MIN_LENGTH = 15;
@@ -9,14 +9,17 @@ const int EXACT_LENGTH = 75;
 // Making matches_patch atomic to prevent data races
 static std::atomic<int> matches_patch{0};
 
+// Function to get the current time
 static std::chrono::time_point<std::chrono::steady_clock> get_current_time() {
     return std::chrono::steady_clock::now();
 }
 
+// Constructor #1
 plagiarism_checker_t::plagiarism_checker_t() : stop_thread(false) {
     worker = std::thread(&plagiarism_checker_t::plagiarism_check, this);
 }
 
+// Constructor #2
 plagiarism_checker_t::plagiarism_checker_t(std::vector<std::shared_ptr<submission_t>> __submissions)
     : stop_thread(false) {
     auto timestamp = get_current_time();
@@ -31,6 +34,7 @@ plagiarism_checker_t::plagiarism_checker_t(std::vector<std::shared_ptr<submissio
     worker = std::thread(&plagiarism_checker_t::plagiarism_check, this);
 }
 
+// Destructor
 plagiarism_checker_t::~plagiarism_checker_t() {
     {
         std::lock_guard<std::mutex> lock(mtx);
@@ -42,6 +46,7 @@ plagiarism_checker_t::~plagiarism_checker_t() {
     }
 }
 
+// Function to add submission to the processing queue
 void plagiarism_checker_t::add_submission(std::shared_ptr<submission_t> __submission) {
     auto timestamp = get_current_time();
     {
@@ -52,7 +57,7 @@ void plagiarism_checker_t::add_submission(std::shared_ptr<submission_t> __submis
     cv.notify_one();
 }
 
-// Fixed flag_submission to prevent race condition
+// Function to flag submissions
 void plagiarism_checker_t::flag_submission(std::shared_ptr<submission_t> submission) {
     bool should_flag = false;
     {
@@ -73,6 +78,7 @@ void plagiarism_checker_t::flag_submission(std::shared_ptr<submission_t> submiss
     }
 }
 
+// Main function to check plagiarism
 void plagiarism_checker_t::plagiarism_check() {
     while (true) {
         std::shared_ptr<submission_t> submission;
@@ -89,7 +95,7 @@ void plagiarism_checker_t::plagiarism_check() {
         }
 
         auto tokens = tokenize_code(submission->codefile);
-        bool plagiarized = false;
+        
         
         // Get current submission time while holding the lock
         std::chrono::time_point<std::chrono::steady_clock> curr_submission_time;
@@ -102,7 +108,6 @@ void plagiarism_checker_t::plagiarism_check() {
 
         for (const auto& [old_submission, old_tokens] : current_database) {
             if (is_plagiarized(tokens, old_tokens)) {
-                plagiarized = true;
                 
                 std::chrono::time_point<std::chrono::steady_clock> old_submission_time;
                 {
@@ -149,11 +154,13 @@ void plagiarism_checker_t::plagiarism_check() {
     }
 }
 
+// Function to tokenize code
 std::vector<int> plagiarism_checker_t::tokenize_code(const std::string codefile) {
     tokenizer_t tokenizer(codefile);
     return tokenizer.get_tokens();
 }
 
+// Function to compute hashes for a given length
 std::unordered_set<int> compute_hashes(const std::vector<int>& tokens, int length, const std::vector<int>& power) {
     std::unordered_set<int> hashes;
     if (tokens.size() < length) return hashes;
@@ -172,6 +179,7 @@ std::unordered_set<int> compute_hashes(const std::vector<int>& tokens, int lengt
     return hashes;
 }
 
+// Helper function to check plagiarism
 bool plagiarism_checker_t::check_plagiarism(const std::vector<int>& tokens, int length, 
     const std::unordered_set<int>& old_hashes, int threshold, const std::vector<int>& power) {
     
@@ -219,6 +227,7 @@ bool plagiarism_checker_t::check_plagiarism(const std::vector<int>& tokens, int 
     return false;
 }
 
+// Function to check if two submissions are plagiarized
 bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens, const std::vector<int>& old_tokens) {
     int new_size = new_tokens.size(), old_size = old_tokens.size();
     std::vector<int> power(std::max({new_size, old_size, EXACT_LENGTH + 1}), 1);
@@ -237,6 +246,7 @@ bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens, co
     return check_plagiarism(new_tokens, MIN_LENGTH, old_hashes_15, 10, power);
 }
 
+// Function to add submissions to database
 void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submission, const std::vector<int>& tokens) {
     auto timestamp = get_current_time();
     {
@@ -246,11 +256,13 @@ void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submiss
     }
 }
 
+// Overload of add_to_database
 void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submission) {
     auto tokens = tokenize_code(submission->codefile);
     add_to_database(submission, tokens);
 }
 
+// Function to get submission timestamp from hashmap
 std::chrono::time_point<std::chrono::steady_clock> plagiarism_checker_t::get_submission_timestamp(
     const std::shared_ptr<submission_t> submission) const {
     std::lock_guard<std::mutex> lock(mtx);

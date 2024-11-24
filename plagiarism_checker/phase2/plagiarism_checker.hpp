@@ -26,13 +26,12 @@ public:
 protected:
     // Database and data structures
     std::unordered_map<std::shared_ptr<submission_t>, std::vector<int>> tokenized_database;
-    std::unordered_map<std::shared_ptr<submission_t>, 
-        std::chrono::time_point<std::chrono::steady_clock>> submission_timestamps;
+    std::unordered_map<std::shared_ptr<submission_t>, std::chrono::time_point<std::chrono::steady_clock>> submission_timestamps;
     std::unordered_set<std::shared_ptr<submission_t>> flagged_sub;
     std::queue<std::shared_ptr<submission_t>> processing_queue;
 
     // Synchronization primitives
-    mutable std::mutex mtx;  // Made mutable to allow const member functions
+    mutable std::mutex mtx; 
     std::condition_variable cv;
     std::thread worker;
     bool stop_thread;
