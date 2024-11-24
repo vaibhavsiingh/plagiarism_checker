@@ -140,7 +140,6 @@ void plagiarism_checker_t::plagiarism_check() {
             if (should_flag) {
                 if (submission->student) submission->student->flag_student(submission);
                 if (submission->professor) submission->professor->flag_professor(submission);
-                std::cout << "patch" << std::endl;
             }
         }
         
