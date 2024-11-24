@@ -1,10 +1,13 @@
+#include <unordered_map>
+#include <chrono>
 #include "./plagiarism_checker.hpp"
-#include<iostream>
 
+#include<iostream>
 const int MOD = 1e9 + 7; // Large prime for hash modulus
 const int BASE = 31;     // Base for rolling hash
 const int MIN_LENGTH = 15;
 const int EXACT_LENGTH = 75;
+int matches_patch=0;
 
 
 // Helper to get the current timestamp
@@ -47,6 +50,8 @@ void plagiarism_checker_t::add_submission(std::shared_ptr<submission_t> __submis
 }
 
 
+
+
 void plagiarism_checker_t::plagiarism_check() {
     while (true) {
         std::shared_ptr<submission_t> submission;
@@ -77,14 +82,7 @@ void plagiarism_checker_t::plagiarism_check() {
                     auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(
                         curr_submission_time - old_submission_time).count();
                     if (time_diff > 1) {
-                        // if (submission->student && !flagged_sub.count(submission->student)) {
-                        //     submission->student->flag_student(submission);
-                        //     flagged_sub.insert(submission->student);
-                        // }
-                        // if (submission->professor && !flagged_professors.count(submission->professor)) {
-                        //     submission->professor->flag_professor(submission);
-                        //     flagged_professors.insert(submission->professor);
-                        // }
+                       
                         if (submission->student && submission->professor){
                             if(!flagged_sub.count(submission)){
                                 submission->student->flag_student(submission);
@@ -105,41 +103,6 @@ void plagiarism_checker_t::plagiarism_check() {
                             }
                         }
                     } else {
-                        // if (submission->student && !flagged_sub.count(submission->student)) {
-                        //     submission->student->flag_student(submission);
-                        //     flagged_sub.insert(submission->student);
-                        // }
-                        // if (submission->professor && !flagged_professors.count(submission->professor)) {
-                        //     submission->professor->flag_professor(submission);
-                        //     flagged_professors.insert(submission->professor);
-                        // }
-                        // if (old_submission->student && !flagged_sub.count(old_submission->student)) {
-                        //     old_submission->student->flag_student(old_submission);
-                        //     flagged_sub.insert(old_submission->student);
-                        // }
-                        // if (old_submission->professor && !flagged_professors.count(old_submission->professor)) {
-                        //     old_submission->professor->flag_professor(old_submission);
-                        //     flagged_professors.insert(old_submission->professor);
-                        // }
-                        if (submission->student && submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                submission->student->flag_student(submission);
-                                submission->professor->flag_professor(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        else if(submission->student){
-                            if(!flagged_sub.count(submission)){
-                                submission->student->flag_student(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        else if(submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                submission->professor->flag_professor(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
 
                         if (old_submission->student && old_submission->professor){
                             if(!flagged_sub.count(old_submission)){
@@ -160,11 +123,40 @@ void plagiarism_checker_t::plagiarism_check() {
                                 flagged_sub.insert(old_submission);
                             }
                         }
+
+                        if (submission->student && submission->professor){
+                            if(!flagged_sub.count(submission)){
+                                submission->student->flag_student(submission);
+                                submission->professor->flag_professor(submission);
+                                flagged_sub.insert(submission);
+                            }
+                        }
+                        else if(submission->student){
+                            if(!flagged_sub.count(submission)){
+                                submission->student->flag_student(submission);
+                                flagged_sub.insert(submission);
+                            }
+                        }
+                        else if(submission->professor){
+                            if(!flagged_sub.count(submission)){
+                                submission->professor->flag_professor(submission);
+                                flagged_sub.insert(submission);
+                            }
+                        }
                         
                     }
                 }
             }
+            if(matches_patch>=35 && !flagged_sub.count(submission)){
+                
+                if (submission->student) submission->student->flag_student(submission);
+                if (submission->professor) submission->professor->flag_professor(submission);
+                std::cout<<"patch"<<std::endl;
+                
+            }
+            matches_patch=0;
 
+            
             // Add submission to the database with tokens
             add_to_database(submission, tokens); // Do not update the timestamp here
         }
@@ -207,19 +199,35 @@ bool check_plagiarism(const std::vector<int>& tokens, int length, const std::uno
     if (old_hashes.count(hash)) {
         match_count++;
         if (length == EXACT_LENGTH || match_count >= threshold){
-            std::cout << "imp: "<<match_count << std::endl;
+            //std::cout<<"Exact 75"<<std::endl;
             return true;
-        } 
+        }
     }
 
-    for (size_t i = length; i < tokens.size(); ++i) {
+    for (int i = length; i < tokens.size(); ++i) {
         hash = (1LL * hash * BASE - 1LL * tokens[i - length] * power[length] % MOD + MOD) % MOD;
         hash = (hash + tokens[i]) % MOD;
         if (old_hashes.count(hash)) {
             match_count++;
-            if (length == EXACT_LENGTH || match_count >= threshold) return true;
+            if (length == EXACT_LENGTH ){
+                //std::cout<<"10 or more"<<match_count<<std::endl;
+                return true;
+            } 
+            i += length - 1; // Move to the end of the matched window
+            if (i >= tokens.size()) break; // Prevent out-of-bounds access
+
+            // Recompute the hash for the next window
+            hash = 0;
+            for (int j = i - length + 1; j <= i; ++j) {
+                hash = (1LL * hash * BASE + tokens[j]) % MOD;
+            }
         }
     }
+    if(match_count>threshold){
+        
+        return true;
+    }
+    matches_patch+=match_count;
     return false;
 }
 
@@ -234,7 +242,10 @@ bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens, co
     auto old_hashes_75 = compute_hashes(old_tokens, EXACT_LENGTH, power);
 
     if (check_plagiarism(new_tokens, EXACT_LENGTH, old_hashes_75, 0, power)) return true;
-    return check_plagiarism(new_tokens, MIN_LENGTH, old_hashes_15, 20, power);
+    
+    return check_plagiarism(new_tokens, MIN_LENGTH, old_hashes_15, 10, power);
+
+    
 }
 
 
