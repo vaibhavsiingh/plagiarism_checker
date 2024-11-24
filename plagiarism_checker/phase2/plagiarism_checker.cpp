@@ -1,175 +1,158 @@
-#include <unordered_map>
-#include <chrono>
-#include "./plagiarism_checker.hpp"
+#include "plagiarism_checker.hpp"
 
-#include<iostream>
-const int MOD = 1e9 + 7; // Large prime for hash modulus
-const int BASE = 31;     // Base for rolling hash
+
+const int MOD = 1e9 + 7;
+const int BASE = 31;
 const int MIN_LENGTH = 15;
 const int EXACT_LENGTH = 75;
-int matches_patch=0;
 
+// Making matches_patch atomic to prevent data races
+static std::atomic<int> matches_patch{0};
 
-// Helper to get the current timestamp
 static std::chrono::time_point<std::chrono::steady_clock> get_current_time() {
     return std::chrono::steady_clock::now();
 }
 
-plagiarism_checker_t::plagiarism_checker_t() : stop_thread(false){
+plagiarism_checker_t::plagiarism_checker_t() : stop_thread(false) {
     worker = std::thread(&plagiarism_checker_t::plagiarism_check, this);
 }
 
 plagiarism_checker_t::plagiarism_checker_t(std::vector<std::shared_ptr<submission_t>> __submissions)
     : stop_thread(false) {
-        auto timestamp = get_current_time();
-    for (const auto& submission : __submissions) {
-        add_to_database(submission);
+    auto timestamp = get_current_time();
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        for (const auto& submission : __submissions) {
+            auto tokens = tokenize_code(submission->codefile);
+            submission_timestamps[submission] = timestamp;
+            tokenized_database[submission] = tokens;
+        }
     }
     worker = std::thread(&plagiarism_checker_t::plagiarism_check, this);
 }
 
 plagiarism_checker_t::~plagiarism_checker_t() {
     {
-        std::lock_guard<std::mutex> lock(queue_mutex); // Lock the queue for thread-safe access
-        stop_thread = true; // Signal the worker thread to stop processing
+        std::lock_guard<std::mutex> lock(mtx);
+        stop_thread = true;
     }
-    cv.notify_all(); // Wake up the worker thread if it's waiting
-    if (worker.joinable()) { // Ensure the worker thread is active
-        worker.join(); // Wait for the thread to finish execution
+    cv.notify_all();
+    if (worker.joinable()) {
+        worker.join();
     }
 }
 
 void plagiarism_checker_t::add_submission(std::shared_ptr<submission_t> __submission) {
-    auto timestamp = get_current_time(); // Record the current time of submission
+    auto timestamp = get_current_time();
     {
-        std::lock_guard<std::mutex> lock(queue_mutex);
-        processing_queue.push(__submission); // Push the submission into the queue
-        submission_timestamps[__submission] = timestamp; // Record the timestamp
+        std::lock_guard<std::mutex> lock(mtx);
+        processing_queue.push(__submission);
+        submission_timestamps[__submission] = timestamp;
     }
-    cv.notify_one(); // Notify the worker thread
+    cv.notify_one();
 }
 
-
-
+// Fixed flag_submission to prevent race condition
+void plagiarism_checker_t::flag_submission(std::shared_ptr<submission_t> submission) {
+    bool should_flag = false;
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        if (!flagged_sub.count(submission)) {
+            flagged_sub.insert(submission);
+            should_flag = true;
+        }
+    }
+    
+    if (should_flag) {
+        if (submission->student) {
+            submission->student->flag_student(submission);
+        }
+        if (submission->professor) {
+            submission->professor->flag_professor(submission);
+        }
+    }
+}
 
 void plagiarism_checker_t::plagiarism_check() {
     while (true) {
         std::shared_ptr<submission_t> submission;
-
         {
-            std::unique_lock<std::mutex> lock(queue_mutex);
+            std::unique_lock<std::mutex> lock(mtx);
             cv.wait(lock, [this] { return !processing_queue.empty() || stop_thread; });
+            
             if (stop_thread && processing_queue.empty()) {
-                break; // Exit loop if stop is signaled and queue is empty
+                break;
             }
+            
             submission = processing_queue.front();
             processing_queue.pop();
         }
 
         auto tokens = tokenize_code(submission->codefile);
+        bool plagiarized = false;
+        
+        // Get current submission time while holding the lock
+        std::chrono::time_point<std::chrono::steady_clock> curr_submission_time;
+        std::unordered_map<std::shared_ptr<submission_t>, std::vector<int>> current_database;
         {
-            std::lock_guard<std::mutex> lock(db_mutex);
-            bool plagiarized = false;
+            std::lock_guard<std::mutex> lock(mtx);
+            curr_submission_time = submission_timestamps[submission];
+            current_database = tokenized_database; // Make a copy to work with
+        }
 
-            auto curr_submission_time = submission_timestamps[submission]; // Use the recorded timestamp
+        for (const auto& [old_submission, old_tokens] : current_database) {
+            if (is_plagiarized(tokens, old_tokens)) {
+                plagiarized = true;
+                
+                std::chrono::time_point<std::chrono::steady_clock> old_submission_time;
+                {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    old_submission_time = submission_timestamps[old_submission];
+                }
 
-            for (const auto& [old_submission, old_tokens] : tokenized_database) {
-                if (is_plagiarized(tokens, old_tokens)) {
-                    plagiarized = true;
-                    auto old_submission_time = submission_timestamps[old_submission];
-
-                    // Handle flagging based on timestamps
-                    auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(
-                        curr_submission_time - old_submission_time).count();
-                    if (time_diff > 1) {
-                       
-                        if (submission->student && submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                submission->student->flag_student(submission);
-                                submission->professor->flag_professor(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        else if(submission->student){
-                            if(!flagged_sub.count(submission)){
-                                submission->student->flag_student(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        else if(submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                submission->professor->flag_professor(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                    } else {
-
-                        if (old_submission->student && old_submission->professor){
-                            if(!flagged_sub.count(old_submission)){
-                                old_submission->student->flag_student(old_submission);
-                                old_submission->professor->flag_professor(old_submission);
-                                flagged_sub.insert(old_submission);
-                            }
-                        }
-                        else if(old_submission->student){
-                            if(!flagged_sub.count(old_submission)){
-                                old_submission->student->flag_student(old_submission);
-                                flagged_sub.insert(old_submission);
-                            }
-                        }
-                        else if(old_submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                old_submission->professor->flag_professor(old_submission);
-                                flagged_sub.insert(old_submission);
-                            }
-                        }
-
-                        if (submission->student && submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                submission->student->flag_student(submission);
-                                submission->professor->flag_professor(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        else if(submission->student){
-                            if(!flagged_sub.count(submission)){
-                                submission->student->flag_student(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        else if(submission->professor){
-                            if(!flagged_sub.count(submission)){
-                                submission->professor->flag_professor(submission);
-                                flagged_sub.insert(submission);
-                            }
-                        }
-                        
-                    }
+                auto time_diff = std::chrono::duration_cast<std::chrono::seconds>(
+                    curr_submission_time - old_submission_time).count();
+                
+                if (time_diff > 1) {
+                    flag_submission(submission);
+                } else {
+                    flag_submission(old_submission);
+                    flag_submission(submission);
                 }
             }
-            if(matches_patch>=35 && !flagged_sub.count(submission)){
-                
+        }
+
+        int current_matches = matches_patch.load();
+        if (current_matches >= 20) {
+            bool should_flag = false;
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                if (!flagged_sub.count(submission)) {
+                    should_flag = true;
+                }
+            }
+            
+            if (should_flag) {
                 if (submission->student) submission->student->flag_student(submission);
                 if (submission->professor) submission->professor->flag_professor(submission);
-                std::cout<<"patch"<<std::endl;
-                
+                std::cout << "patch" << std::endl;
             }
-            matches_patch=0;
-
-            
-            // Add submission to the database with tokens
-            add_to_database(submission, tokens); // Do not update the timestamp here
+        }
+        
+        matches_patch.store(0);
+        
+        // Add submission to database
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            tokenized_database[submission] = tokens;
         }
     }
 }
 
-
-std::vector<int> plagiarism_checker_t::tokenize_code(const std::string& codefile) {
+std::vector<int> plagiarism_checker_t::tokenize_code(const std::string codefile) {
     tokenizer_t tokenizer(codefile);
     return tokenizer.get_tokens();
 }
-
-
 
 std::unordered_set<int> compute_hashes(const std::vector<int>& tokens, int length, const std::vector<int>& power) {
     std::unordered_set<int> hashes;
@@ -189,51 +172,57 @@ std::unordered_set<int> compute_hashes(const std::vector<int>& tokens, int lengt
     return hashes;
 }
 
-bool check_plagiarism(const std::vector<int>& tokens, int length, const std::unordered_set<int>& old_hashes, int threshold, const std::vector<int>& power) {
+bool plagiarism_checker_t::check_plagiarism(const std::vector<int>& tokens, int length, 
+    const std::unordered_set<int>& old_hashes, int threshold, const std::vector<int>& power) {
+    
     if (tokens.size() < length) return false;
 
-    int hash = 0, match_count = 0;
+    int hash = 0;
+    std::atomic<int> match_count{0};
+
     for (int i = 0; i < length; ++i) {
         hash = (1LL * hash * BASE + tokens[i]) % MOD;
     }
+    
     if (old_hashes.count(hash)) {
         match_count++;
-        if (length == EXACT_LENGTH || match_count >= threshold){
-            //std::cout<<"Exact 75"<<std::endl;
+        if (length == EXACT_LENGTH || match_count >= threshold) {
             return true;
         }
     }
 
-    for (int i = length; i < tokens.size(); ++i) {
+    for (size_t i = length; i < tokens.size(); ++i) {
         hash = (1LL * hash * BASE - 1LL * tokens[i - length] * power[length] % MOD + MOD) % MOD;
         hash = (hash + tokens[i]) % MOD;
+        
         if (old_hashes.count(hash)) {
             match_count++;
-            if (length == EXACT_LENGTH ){
-                //std::cout<<"10 or more"<<match_count<<std::endl;
+            if (length == EXACT_LENGTH) {
                 return true;
-            } 
-            i += length - 1; // Move to the end of the matched window
-            if (i >= tokens.size()) break; // Prevent out-of-bounds access
+            }
+            
+            i += length - 1;
+            if (i >= tokens.size()) break;
 
-            // Recompute the hash for the next window
             hash = 0;
             for (int j = i - length + 1; j <= i; ++j) {
                 hash = (1LL * hash * BASE + tokens[j]) % MOD;
             }
         }
     }
-    if(match_count>threshold){
-        
+
+    if (match_count > threshold) {
         return true;
     }
-    matches_patch+=match_count;
+
+    matches_patch.fetch_add(match_count);
     return false;
 }
 
 bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens, const std::vector<int>& old_tokens) {
     int new_size = new_tokens.size(), old_size = old_tokens.size();
     std::vector<int> power(std::max({new_size, old_size, EXACT_LENGTH + 1}), 1);
+    
     for (int i = 1; i < power.size(); i++) {
         power[i] = (1LL * power[i - 1] * BASE) % MOD;
     }
@@ -241,31 +230,30 @@ bool plagiarism_checker_t::is_plagiarized(const std::vector<int>& new_tokens, co
     auto old_hashes_15 = compute_hashes(old_tokens, MIN_LENGTH, power);
     auto old_hashes_75 = compute_hashes(old_tokens, EXACT_LENGTH, power);
 
-    if (check_plagiarism(new_tokens, EXACT_LENGTH, old_hashes_75, 0, power)) return true;
+    if (check_plagiarism(new_tokens, EXACT_LENGTH, old_hashes_75, 0, power)) {
+        return true;
+    }
     
     return check_plagiarism(new_tokens, MIN_LENGTH, old_hashes_15, 10, power);
-
-    
 }
 
-
-// Add submission to database with tokenization and timestamp
 void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submission, const std::vector<int>& tokens) {
-    
     auto timestamp = get_current_time();
-    submission_timestamps[submission] = timestamp; // Record the timestamp
-    tokenized_database[submission] = tokens;
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        submission_timestamps[submission] = timestamp;
+        tokenized_database[submission] = tokens;
+    }
 }
 
-// Overload for when tokens are not precomputed
 void plagiarism_checker_t::add_to_database(std::shared_ptr<submission_t> submission) {
     auto tokens = tokenize_code(submission->codefile);
     add_to_database(submission, tokens);
 }
 
-// Get timestamp for a submission
 std::chrono::time_point<std::chrono::steady_clock> plagiarism_checker_t::get_submission_timestamp(
-    const std::shared_ptr<submission_t>& submission) const {
+    const std::shared_ptr<submission_t> submission) const {
+    std::lock_guard<std::mutex> lock(mtx);
     auto it = submission_timestamps.find(submission);
     if (it != submission_timestamps.end()) {
         return it->second;

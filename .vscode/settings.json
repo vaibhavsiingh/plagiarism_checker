@@ -63,6 +63,7 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "unordered_set": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "shared_mutex": "cpp"
     }
 }
