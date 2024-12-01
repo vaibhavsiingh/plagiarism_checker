@@ -1,96 +1,81 @@
-#include <bits/stdc++.h>
-using namespace std;
- 
-typedef int64_t ll;
-typedef vector<ll> vll;
-typedef pair<ll, ll> pll;
- 
-#define pb push_back
-#define pob pop_back
-#define ff first
-#define ss second
-#define sz size
-#define reach cout << "Reached" << endl;
-#define o1(a) cout << a << "\n"
-#define o2(a, b) cout << a << ' ' << b << "\n";
-#define o3(a,b,c) cout << a << ' ' << b << ' ' << c  <<"\n";
-#define iArray(a, n) for (ll i = 0; i < n; i++) cin >> a[i];
-#define i2(a, b) cin >> a >> b;
- 
-const ll MOD = 1000000007;
- 
-ll bfs(vector<vector<char>>grid,vector<vll>& dist,pll start,ll n,ll m){
-    vector<pll> direc = {{-1,0},{0,1},{1,0},{0,-1}};
-    queue<pll> q;
-    q.push(start);
-    while(!q.empty()){
-        ll a =q.front().ff, b=q.front().ss;
+class Solution {
+public:
+
+    bool isPossible(char value, int row , int col , vector<vector<char>>& board){
+
+        // check current row is already filled with current value or not
+        for(int i=0; i<9; i++){
+            if(board[i][col] == value) return false;
+        }
+
+        // check current column is already filled with current value or not
+        for(int j=0; j<9; j++){
+            if(board[row][j] == value) return false;
+        }
         
-        q.pop();
-        for(pll c:direc){
-            ll na = a+c.ff,nb=b+c.ss;
-            if(na >=0 && na <n && nb>=0 && nb<m ){
+        // check current BOX is already filled with current value or not
+        int boxRow = row - row%3 , boxCol = col - col%3;
+        for(int i=0; i<3; i++){
+            for(int j=0; j<3; j++){
+                if(board[boxRow+i][boxCol+j] == value) return false;
+            }
+        }
+        
+        // current value is not filled at current row , column & box
+        return true;
+
+    }
+    bool solver(int index , int n, vector<pair<int,int>>&emptyCells, vector<vector<char>>& board){
+
+        // base case | all empty cells are filled
+        if(index == n){
+            return true;
+        }
+
+        // try each possible solution for each cell
+        for(int i=1;i<=9;i++){
+
+            // get current cell address
+            int row = emptyCells[index].first , col = emptyCells[index].second;
+
+            // check is possible to fill current value or not
+            if(isPossible(i+'0',row,col,board)){
                 
-                if(grid[na][nb] == 'B') return dist[a][b]+1;
-                if(grid[na][nb] == '#') continue;
-                if(dist[na][nb]!=-1) continue;
-                q.push({na,nb});
-                dist[na][nb] = dist[a][b]+1;
+                // assign current value at current empty cell
+                board[row][col] = (i + '0');
+
+                // try for next empty cell
+                bool isSolution = solver(index+1,n,emptyCells,board);         
+                // solution is found 
+                if(isSolution) return true;
+
+                // backtrack from here
+                board[row][col] = '.';
+
             }
+
         }
+
+        return false;
     }
-    return -1;
-    
-}
- 
-void sol(){
-    ll n,m;
-    i2(n,m);
-    pll start,end;
-    vector<vector<char>> grid(n,vector<char>(m));
-    for(ll i = 0; i < n; i++) {
-        for(ll j=0; j<m; j++){
-             cin >> grid[i][j];
-             if(grid[i][j]=='A') start = {i,j};
-             else if(grid[i][j]=='B') end = {i,j};
-        }
-    }
-    vector<vll> dist(n,vll(m,-1));
-    dist[start.ff][start.ss] = 0;
-    ll length = bfs(grid, dist, start, n,m);
-    if(length >0){
-        o1("YES");
-        o1(length);
-        ll i=end.ff,j=end.ss;
-        vector<pll> direc = {{-1,0},{0,1},{1,0},{0,-1}};
-        vector<char> ans;
-        for(ll dis = length-1; dis>=0; dis--){
-            for(pll c:direc){
-                ll na = i+c.ff,nb=c.ss+j;
-                if(na >=0 && na <n && nb>=0 && nb<m ){
-                    if(dist[na][nb]==dis){
-                        i = na;
-                        j = nb;
-                        if(c.ff == -1) ans.pb('D');
-                        else if(c.ff == 1) ans.pb('U');
-                        else if(c.ss == 1) ans.pb('L');
-                        else ans.pb('R');
-                    }
+    void solveSudoku(vector<vector<char>>& board) {
+        
+        // for storing empty cells
+        vector<pair<int,int>>emptyCells;
+
+        // store empty cells
+        for(int i=0;i<9;i++){
+            for(int j=0;j<9;j++){
+                if(board[i][j] == '.'){
+                    emptyCells.push_back({i,j});
                 }
- 
             }
         }
-        for(ll i = length-1; i >=0 ; i--) {
-            cout << ans[i];
-        }
+
+        int n = emptyCells.size();
+
+        // find solution
+        solver(0,n,emptyCells,board);
+
     }
-    else o1("NO");
-}
- 
- 
-int main(){
-    std::ios::sync_with_stdio(false);
-    cin.tie(NULL);
-    cout.tie(NULL);
-    sol();
-}
+};

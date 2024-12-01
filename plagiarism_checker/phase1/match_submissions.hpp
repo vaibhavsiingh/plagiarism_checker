@@ -1,216 +1,176 @@
 #include <array>
+#include <cmath>
 #include <iostream>
 #include <span>
 #include <vector>
-#include <cmath>
 // -----------------------------------------------------------------------------
-#include <set>
-#include <unordered_map>
-#include <string>
-#include<algorithm>
+
 // You are free to add any STL includes above this comment, below the --line--.
 // DO NOT add "using namespace std;" or include any other files/libraries.
 // Also DO NOT add the include "bits/stdc++.h"
 
 // OPTIONAL: Add your helper functions and data structures here
-
-
-
-// OPTIONAL: Add your helper functions and data structures here
- // FOR THE FOLLOWING FUNCTION IMPLEMENTATION we adapted a part of code from geeksandgeeks. DP programming and LCS : https://www.geeksforgeeks.org/longest-common-subsequence-dp-4/
-
-struct Result {
-    int start1, end1, start2, end2, length;
-    bool valid;
+namespace match_detector {
+    std::vector<int> KMPtable(std::span<int> pattern);
+    std::vector<std::pair<int, int>> KMPsearch(std::span<int> vec, 
+            std::span<int> pattern, int min_match_len);
+    int net_match_len(std::span<int> submission1, std::span<int> submission2);
+    bool is_approx_match(std::span<int> sequence1, 
+            std::span<int> sequence2);
+    std::array<int, 3> find_longest_approx_match(std::span<int> submission1, 
+            std::span<int> submission2);
 };
 
-class SequenceMatcher {
-public:
-    // Main function to find a valid pair of sequences with LCS length meeting the threshold criteria
-    static Result findValidSequences(const std::vector<int>& v1, const std::vector<int>& v2, double threshold = 0.8) {
-        // Initialize an invalid Result by default
-        Result result = {-1, -1, -1, -1, 0, false};
-
-        // If either vector is empty, return the invalid result immediately
-        if (v1.empty() || v2.empty()) return result;
-
-        // Obtain the longest common subsequence as pairs of matching indices
-        std::vector<std::pair<int, int>> lcs = getLCS(v1, v2);
-        if (lcs.empty()) return result;  // Return if no common subsequence exists
-
-        int maxLength = 0;  // Variable to track the maximum sequence length found
-
-        // Explore pairs of indices in the LCS list to find the longest valid sequence within the threshold
-        for (int i = 0; i < lcs.size(); ++i) {
-            for (int j = i; j < lcs.size(); ++j) {
-                int len1 = lcs[j].first - lcs[i].first + 1;  // Length of subsequence in v1
-                int len2 = lcs[j].second - lcs[i].second + 1; // Length of subsequence in v2
-                int matches = j - i + 1;  // Number of matching elements
-
-                // Check if the matches meet the threshold for both v1 and v2 subsequence lengths
-                if (matches >= threshold * len1 && matches >= threshold * len2) {
-                    int currentLength = std::max(len1, len2);  // Determine the longer sequence length
-                    // Update result if this sequence is the longest one found that meets the criteria
-                    if (currentLength > maxLength) {
-                        maxLength = currentLength;
-                        result = {lcs[i].first, lcs[j].first, lcs[i].second, lcs[j].second, currentLength, true};
-                    }
-                }
-            }
-        }
-
-        return result;  // Return the best found sequence or an invalid result if none met the criteria
-    }
-
-private:
-    // Function to compute the LCS as pairs of indices (index from v1 and v2 for each matching element)
-    static std::vector<std::pair<int, int>> getLCS(const std::vector<int>& a, const std::vector<int>& b) {
-        int m = a.size(), n = b.size();
-        std::vector<std::vector<int>> dp(m + 1, std::vector<int>(n + 1, 0));  // DP table for LCS length calculation
-
-        // Fill the DP table based on matching elements between a and b
-        for (int i = 1; i <= m; ++i) {
-            for (int j = 1; j <= n; ++j) {
-                if (a[i-1] == b[j-1]) {
-                    dp[i][j] = dp[i-1][j-1] + 1;  // Extend LCS if elements match
-                } else {
-                    dp[i][j] = std::max(dp[i-1][j], dp[i][j-1]);  // Otherwise, take the longer of previous results
-                }
-            }
-        }
-
-        // Backtrack through the DP table to reconstruct the LCS as index pairs
-        std::vector<std::pair<int, int>> lcs;
-        int i = m, j = n;
-        while (i > 0 && j > 0) {
-            if (a[i-1] == b[j-1]) {
-                lcs.push_back({i-1, j-1});  // Add matching indices to the LCS list
-                --i; --j;  // Move diagonally in the DP table
-            } else if (dp[i-1][j] > dp[i][j-1]) {
-                --i;  // Move up in DP table if upper cell has greater LCS value
+std::vector<int> match_detector::KMPtable(std::span<int> pattern) {
+    int len = pattern.size();
+    std::vector<int> table(len, 0);
+    int i = 1;
+    int j = 0;
+    while (i < len) {
+        if (pattern[i] == pattern[j]) {
+            j++;
+            table[i] = j;
+            i++;
+        } else {
+            if (j != 0) {
+                j = table[j - 1];
             } else {
-                --j;  // Move left in DP table if left cell has greater LCS value
+                table[i] = 0;
+                i++;
             }
         }
-        
-        std::reverse(lcs.begin(), lcs.end());  // Reverse to get indices in the correct order
-        return lcs;
     }
-};
+    return table;
+}
 
+std::vector<std::pair<int, int>> match_detector::KMPsearch(std::span<int> vec, 
+        std::span<int> pattern, int min_match_len) {
+    std::vector<std::pair<int, int>> result;
+    std::vector<int> table = match_detector::KMPtable(pattern);
+    int len = vec.size();
+    int len_pattern = pattern.size();
+    int i = 0;
+    int j = 0;
+    while (i < len) {
+        if (vec[i] == pattern[j]) {
+            i++;
+            if (++j < min_match_len) {
+                continue;
+            }
+            if (result.empty() || i - j > result.back().first) {
+                result.push_back({i - j, j});
+            } else {
+                result.back().second = j;
+            }
+            j = table[j - 1];
+        } else {
+            if (j != 0) {
+                j = table[j - 1];
+            } else {
+                i++;
+            }
+        }
+    }
+    return result;
+}
 
+int match_detector::net_match_len(std::span<int> submission1, 
+        std::span<int> submission2) {
+    int len1 = submission1.size();
+    int len2 = submission2.size();
+    std::vector<int> best_match_sub1_dp(len1 - 9, 0);
+    for (int pos1 = len1 - 10; pos1 >= 0; pos1--) {
+        if (pos1 + 10 < len1) {
+            best_match_sub1_dp[pos1] = best_match_sub1_dp[pos1 + 1];
+        }
+        for (decltype(auto) match : match_detector::KMPsearch(submission2, 
+                submission1.subspan(pos1, 10), 10)) {
+            if (pos1 + match.second > len1 - 10) continue;
+            best_match_sub1_dp[pos1] = std::max(best_match_sub1_dp[pos1], 
+                    match.second + best_match_sub1_dp[pos1 + match.second]);
+        }
+    }
+    return best_match_sub1_dp[0];
+}
 
+bool match_detector::is_approx_match(
+        std::span<int> sequence1, std::span<int> sequence2) {
+    int len1 = sequence1.size();
+    int len2 = sequence2.size();
+    if (std::max(len1, len2) > 1.1 * std::min(len1, len2)) {
+        return false;
+    }
+    std::vector<std::vector<int>> longest_subseq(len1 + 1, 
+            std::vector<int>(len2 + 1, 0));
+    for (int i = len1; i >= 0; i--) for (int j = len2; j >= 0; j--) {
+        if (i == len1 || j == len2) {
+            longest_subseq[i][j] = 0;
+        } else if (sequence1[i] == sequence2[j]) {
+            longest_subseq[i][j] = longest_subseq[i + 1][j + 1] + 1;
+        } else {
+            longest_subseq[i][j] = std::max(longest_subseq[i + 1][j], 
+                    longest_subseq[i][j + 1]);
+        }
+    }
+    if (longest_subseq[0][0] < 0.8 * std::min(len1, len2)) {
+        return false;
+    }
+    return true;
+}
 
-//Function to find total length of matching substrings. FOR result[1]
-std::unordered_map<std::string, std::vector<int>> get_n_length_substrings(const std::vector<int>& tokens, int n, std::set<int>& used_indices) {
-    std::unordered_map<std::string, std::vector<int>> substrings;
-    for (size_t i = 0; i + n <= tokens.size(); ++i) {
-        // Check if this substring overlaps with already used indices
-        bool overlap = false;
-        for (int j = 0; j < n; ++j) {
-            if (used_indices.count(i + j)) {
-                overlap = true;
+std::array<int, 3> match_detector::find_longest_approx_match(
+        std::span<int> sequence1, std::span<int> sequence2) {
+    int len1 = sequence1.size();
+    int len2 = sequence2.size();
+    std::array<int, 3> result = {0, 0, 0};
+    std::vector<std::vector<bool>> all_matches(len1 / 10,
+            std::vector<bool>(len2 / 10, false));
+    for (int i = 0; i < (len1 - 30) / 10; i++) {
+        for (int j = 0; j < (len2 - 30) / 10; j++) {
+            if (match_detector::is_approx_match(
+                    sequence1.subspan(i * 10, 30), 
+                    sequence2.subspan(j * 10, 30))) {
+                all_matches[i][j] = true;
+            }
+        }
+    }
+    for (int i = 0; i < len1 / 10; i++) for (int j = 0; j < len2 / 10; j++) {
+        if (!all_matches[i][j]) {
+            continue;
+        }
+        int match_len = 30;
+        for (int k = 1; k < std::min(len1 / 10 - i, len2 / 10 - j); k++) {
+            if (!all_matches[i + k][j + k]) {
                 break;
             }
+            match_len += 10;
         }
-        if (overlap) continue;
-
-        // Build a string representation of the n-length substring
-        std::string pattern;
-        for (int j = 0; j < n; ++j) {
-            pattern += std::to_string(tokens[i + j]) + ",";
+        if (match_len <= result[0]) {
+            continue;
         }
-
-        // Store the starting index for each unique pattern
-        substrings[pattern].push_back(i);
+        result[0] = match_len;
+        result[1] = i * 10;
+        result[2] = j * 10;
     }
-    return substrings;
+    return result;
 }
-
-// Function to find the total length of non-overlapping exact pattern matches between lengths 10 and max_match_len
-int find_total_match_length(const std::vector<int>& submission1, const std::vector<int>& submission2, int min_match_len= 10, int max_match_len = 29) {
-    int total_length = 0;
-    std::set<int> used_indices1, used_indices2; // Track used indices in each vector
-
-    // Loop through each length from max_match_len to min_match_len
-    for (int n = max_match_len; n >= min_match_len; --n) {
-        // Get all non-overlapping n-length substrings for both submissions
-        std::unordered_map<std::string, std::vector<int>> patterns1 = get_n_length_substrings(submission1, n, used_indices1);
-        std::unordered_map<std::string, std::vector<int>> patterns2 = get_n_length_substrings(submission2, n, used_indices2);
-
-        // Find common patterns and accumulate their lengths
-        for (const auto& entry : patterns1) {
-            const std::string& pattern = entry.first;
-
-            // Check if the pattern exists in both submissions
-            if (patterns2.find(pattern) != patterns2.end()) {
-                // Process each occurrence of the pattern in submission1
-                for (int idx1 : patterns1[pattern]) {
-                    // If indices overlap in submission1, skip this match
-                    bool overlap1 = false;
-                    for (int j = 0; j < n; ++j) {
-                        if (used_indices1.count(idx1 + j)) {
-                            overlap1 = true;
-                            break;
-                        }
-                    }
-                    if (overlap1) continue;
-
-                    // Process each occurrence of the pattern in submission2
-                    for (int idx2 : patterns2[pattern]) {
-                        bool overlap2 = false;
-                        for (int j = 0; j < n; ++j) {
-                            if (used_indices2.count(idx2 + j)) {
-                                overlap2 = true;
-                                break;
-                            }
-                        }
-                        if (overlap2) continue;
-
-                        // If no overlap, count this match and mark indices as used
-                        total_length += n;
-                        for (int j = 0; j < n; ++j) {
-                            used_indices1.insert(idx1 + j);
-                            used_indices2.insert(idx2 + j);
-                        }
-
-                        // Break after finding one match to avoid multiple counting for the same pattern
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    return total_length;
-}
-
 
 std::array<int, 5> match_submissions(std::vector<int> &submission1, 
         std::vector<int> &submission2) {
     // TODO: Write your code here
-    std::array<int, 5> result = {-1, 0, -1, -1, -1};
-    result[1] = find_total_match_length(submission1,submission2);
-    Result longest = SequenceMatcher::findValidSequences(submission1, submission2);  //class RESULT IS DEFINED EARLIER 
-    // result[2] = longest.maxLength;
-    // result[3] = longest.index1;
-    // result[4] = longest.index2;
-    if(longest.length > 0) {
-        result[2] = longest.length;
-        result[3] = longest.start1;
-        result[4] = longest.start2;
-    }
+    std::array<int, 5> result = {0, 0, 0, 0, 0};
+    std::span<int> sub1_span = std::span(submission1);
+    std::span<int> sub2_span = std::span(submission2);
 
-    int min  = (submission1.size()>submission2.size())? submission2.size() : submission1.size();
-
-
-    if( result[1] / static_cast<double>(min) >= 0.2   || result[2]/static_cast<double>(min) >= 0.3){
-        result[0] = 1;
-
-    }
-    else{
-        result[0] = 0;
-    }
-    return result; 
-    // End TODO  
+    std::cout << submission1.size() << ' ' << submission2.size() << "\n";
+    result[1] = std::min(match_detector::net_match_len(sub1_span, sub2_span), 
+            match_detector::net_match_len(sub2_span, sub1_span));
+    std::array<int, 3> approx_match = match_detector::find_longest_approx_match(
+            sub1_span, sub2_span);
+    result[2] = approx_match[0];
+    result[3] = approx_match[1];
+    result[4] = approx_match[2];
+    result[0] = (result[1] >= 100 || result[2] >= 75) ? 1 : 0;
+    return result;
+    // End TODO
 }
